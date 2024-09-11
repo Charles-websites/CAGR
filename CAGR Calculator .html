@@ -1,0 +1,346 @@
+
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CAGR 計算器與圖表</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/0.5.0-beta4/html2canvas.min.js"></script>
+</head>
+<body class="bg-gray-100 p-8">
+    <div id="userGuide" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 hidden">
+        <div class="bg-white p-8 rounded-lg max-w-2xl">
+            <h2 class="text-2xl font-bold mb-4">使用手冊</h2>
+            <ol class="list-decimal list-inside space-y-2">
+                <li>如果您不知道CAGR：
+                    <ul class="list-disc list-inside ml-4">
+                        <li>填寫起始年份、結束年份、初始值和終值</li>
+                        <li>點擊"計算"按鈕，系統會計算出CAGR</li>
+                    </ul>
+                </li>
+                <li>如果您知道CAGR：
+                    <ul class="list-disc list-inside ml-4">
+                        <li>填寫CAGR和起始年份</li>
+                        <li>填寫初始值或終值其中之一</li>
+                        <li>選擇性地填寫結束年份（如果不填，系統會計算出來）</li>
+                        <li>點擊"計算"按鈕，系統會計算出其他未知的值</li>
+                    </ul>
+                </li>
+                <li>系統會根據輸入生成圖表和數據表格</li>
+                <li>您可以使用"下載圖表"按鈕將圖表保存為PNG圖片</li>
+                <li>您可以自定義縱軸單位和選擇是否顯示圖例</li>
+            </ol>
+            <button id="closeGuide" class="mt-6 bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">關閉</button>
+        </div>
+    </div>
+
+    <div class="max-w-4xl mx-auto bg-white rounded-xl shadow-md overflow-hidden p-6">
+        <h1 class="text-2xl font-bold mb-6 text-center">CAGR 計算器與圖表</h1>
+        
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+            <div>
+                <label class="block mb-2">起始年份：</label>
+                <input type="number" id="startYear" class="w-full p-2 border rounded" placeholder="例如：2024">
+            </div>
+            <div>
+                <label class="block mb-2">結束年份：</label>
+                <input type="number" id="endYear" class="w-full p-2 border rounded" placeholder="例如：2030">
+            </div>
+            <div>
+                <label class="block mb-2">初始值：</label>
+                <input type="number" id="initialValue" class="w-full p-2 border rounded" placeholder="初始值">
+            </div>
+            <div>
+                <label class="block mb-2">終值：</label>
+                <input type="number" id="finalValue" class="w-full p-2 border rounded" placeholder="終值">
+            </div>
+            <div>
+                <label class="block mb-2">CAGR (%)：</label>
+                <input type="number" id="cagr" class="w-full p-2 border rounded" placeholder="CAGR">
+            </div>
+            <div>
+                <label class="block mb-2">圖表標題：</label>
+                <input type="text" id="chartTitle" class="w-full p-2 border rounded" placeholder="輸入圖表標題">
+            </div>
+            <div>
+                <label class="block mb-2">縱軸單位：</label>
+                <input type="text" id="yAxisUnit" class="w-full p-2 border rounded" placeholder="例如：美元、人數">
+            </div>
+            <div class="flex items-center">
+                <input type="checkbox" id="showLegend" class="mr-2">
+                <label for="showLegend">顯示圖例</label>
+            </div>
+        </div>
+        
+        <button id="calculate" class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 mb-4">計算</button>
+        
+        <div id="result" class="mb-6"></div>
+        
+        <div class="mb-6">
+            <canvas id="chart"></canvas>
+        </div>
+        
+        <button id="downloadChart" class="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600 mb-4">下載圖表</button>
+        
+        <div class="overflow-x-auto">
+            <table id="dataTable" class="w-full table-auto border-collapse border border-gray-300">
+                <thead>
+                    <tr class="bg-gray-200">
+                        <th class="border border-gray-300 px-4 py-2">年份</th>
+                        <th class="border border-gray-300 px-4 py-2">值</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        const startYearInput = document.getElementById('startYear');
+        const endYearInput = document.getElementById('endYear');
+        const initialValueInput = document.getElementById('initialValue');
+        const finalValueInput = document.getElementById('finalValue');
+        const cagrInput = document.getElementById('cagr');
+        const chartTitleInput = document.getElementById('chartTitle');
+        const yAxisUnitInput = document.getElementById('yAxisUnit');
+        const showLegendCheckbox = document.getElementById('showLegend');
+        const calculateButton = document.getElementById('calculate');
+        const resultDiv = document.getElementById('result');
+        const chartCanvas = document.getElementById('chart');
+        const downloadChartButton = document.getElementById('downloadChart');
+        const dataTable = document.getElementById('dataTable').getElementsByTagName('tbody')[0];
+        const userGuide = document.getElementById('userGuide');
+        const closeGuideButton = document.getElementById('closeGuide');
+
+        let chart;
+
+        // Show user guide on page load
+        window.addEventListener('load', () => {
+            userGuide.classList.remove('hidden');
+        });
+
+        closeGuideButton.addEventListener('click', () => {
+            userGuide.classList.add('hidden');
+        });
+
+        calculateButton.addEventListener('click', calculate);
+        downloadChartButton.addEventListener('click', downloadChart);
+
+        function calculate() {
+            const startYear = parseInt(startYearInput.value);
+            const endYear = parseInt(endYearInput.value);
+            let initialValue = parseFloat(initialValueInput.value);
+            let finalValue = parseFloat(finalValueInput.value);
+            let cagr = parseFloat(cagrInput.value);
+            let years = endYear - startYear;
+
+            if (isNaN(startYear)) {
+                alert('請輸入有效的起始年份');
+                return;
+            }
+
+            if (isNaN(cagr)) {
+                // CAGR未填寫，需要其他四個值
+                if (isNaN(endYear) || isNaN(initialValue) || isNaN(finalValue)) {
+                    alert('當CAGR未填寫時，請填寫起始年份、結束年份、初始值和終值');
+                    return;
+                }
+                years = endYear - startYear;
+                cagr = (Math.pow(finalValue / initialValue, 1 / years) - 1) * 100;
+            } else {
+                // CAGR已填寫，只需要起始年份和初始值或終值之一
+                if (isNaN(initialValue) && isNaN(finalValue)) {
+                    alert('請至少填寫初始值或終值其中之一');
+                    return;
+                }
+                if (isNaN(endYear)) {
+                    if (isNaN(initialValue)) {
+                        alert('當只有CAGR和終值時，請填寫結束年份');
+                        return;
+                    }
+                    // 計算結束年份
+                    years = Math.log(finalValue / initialValue) / Math.log(1 + cagr / 100);
+                    endYear = startYear + Math.round(years);
+                } else {
+                    years = endYear - startYear;
+                }
+                if (isNaN(initialValue)) {
+                    initialValue = finalValue / Math.pow(1 + cagr / 100, years);
+                }
+                if (isNaN(finalValue)) {
+                    finalValue = initialValue * Math.pow(1 + cagr / 100, years);
+                }
+            }
+
+            resultDiv.innerHTML = `
+                <p>初始值: ${formatNumber(initialValue)}</p>
+                <p>終值: ${formatNumber(finalValue)}</p>
+                <p>CAGR: ${cagr.toFixed(2)}%</p>
+                <p>起始年份: ${startYear}</p>
+                <p>結束年份: ${endYear}</p>
+                <p>年數: ${years}</p>
+            `;
+
+            const data = generateYearlyData(startYear, endYear, initialValue, cagr);
+            updateChart(data);
+            updateTable(data);
+        }
+
+        function generateYearlyData(startYear, endYear, initialValue, cagr) {
+            const data = [];
+            for (let year = startYear; year <= endYear; year++) {
+                const value = initialValue * Math.pow(1 + cagr / 100, year - startYear);
+                data.push({ year, value });
+            }
+            return data;
+        }
+
+        function updateChart(data) {
+            if (chart) {
+                chart.destroy();
+            }
+
+            const ctx = chartCanvas.getContext('2d');
+            const chartTitle = chartTitleInput.value || 'CAGR 圖表';
+            const yAxisUnit = yAxisUnitInput.value || '值';
+
+            chart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: data.map(d => d.year),
+                    datasets: [
+                        {
+                            label: '年度值',
+                            data: data.map(d => d.value),
+                            backgroundColor: 'rgba(54, 162, 235, 0.5)',
+                            borderColor: 'rgba(54, 162, 235, 1)',
+                            borderWidth: 1
+                        },
+                        {
+                            label: '趨勢線',
+                            data: data.map(d => d.value),
+                            type: 'line',
+                            fill: false,
+                            borderColor: 'rgba(255, 99, 132, 1)',
+                            tension: 0.1
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    aspectRatio: 4/3,
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: chartTitle,
+                            font: {
+                                size: 18
+                            }
+                        },
+                        legend: {
+                            display: showLegendCheckbox.checked
+                        },
+                        annotation: {
+                            annotations: {
+                                cagr: {
+                                    type: 'label',
+                                    xValue: data[Math.floor(data.length / 2)].year,
+                                    yValue: data[Math.floor(data.length / 2)].value,
+                                    content: [`CAGR: ${cagrInput.value}%`],
+                                    font: {
+                                        size: 14
+                                    },
+                                    backgroundColor: 'rgba(255, 255, 255, 0.7)'
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            title: {
+                                display: true,
+                                text: '年份',
+                                color: 'black'
+                            },
+                            ticks: {
+                                color: 'black'
+                            }
+                        },
+                        y: {
+                            title: {
+                                display: true,
+                                text: yAxisUnit,
+                                color: 'black'
+                            },
+                            ticks: {
+                                color: 'black',
+                                callback: function(value, index, values) {
+                                    return formatAxisLabel(value);
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        function updateTable(data) {
+            dataTable.innerHTML = '';
+            data.forEach(d => {
+                const row = dataTable.insertRow();
+                const yearCell = row.insertCell(0);
+                const valueCell = row.insertCell(1);
+                yearCell.textContent = d.year;
+                valueCell.textContent = formatNumber(d.value);
+            });
+        }
+
+        function formatNumber(num) {
+            return new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 }).format(num);
+        }
+
+        function formatAxisLabel(value) {
+            if (value >= 1e12) return (value / 1e12).toFixed(1) + 'T';
+            if (value >= 1e9) return (value / 1e9).toFixed(1) + 'B';
+            if (value >= 1e6) return (value / 1e6).toFixed(1) + 'M';
+            if (value >= 1e3) return (value / 1e3).toFixed(1) + 'K';
+            return value.toFixed(0);
+        }
+
+        function downloadChart() {
+            html2canvas(chartCanvas).then(canvas => {
+                const link = document.createElement('a');
+                link.download = 'cagr_chart.png';
+                link.href = canvas.toDataURL();
+                link.click();
+            });
+        }
+    </script>
+<script>window.parent.postMessage({ action: "ready" }, "*"); 
+ 
+window.console = new Proxy(console, {
+  get(target, prop) {
+    if (['log', 'warn', 'error'].includes(prop)) {
+      return new Proxy(target[prop], {
+        apply(fn, thisArg, args) {
+          fn.apply(thisArg, args);
+          window.parent.postMessage({ action: 'console', 
+            type: prop, 
+            args: args.map((arg) => {
+              try {
+                return JSON.stringify(arg).replace(/^["']|["']$/g, '');
+              } catch (e) {
+                return arg;
+              }
+            }) 
+          }, '*');
+        }
+      });
+    }
+    return target[prop];
+  }
+});
+</script></body>
+</html>
